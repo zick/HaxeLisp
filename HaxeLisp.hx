@@ -244,12 +244,62 @@ class Evaluator {
         }
         return Util.getCell(bind).cdr;
       }
-      default: return Error("noimpl");
+      default: true;
     }
+
+    var op = Util.safeCar(obj);
+    var args = Util.safeCdr(obj);
+    if (op == Util.makeSym("quote")) {
+      return Util.safeCar(args);
+    } else if (op == Util.makeSym("if")) {
+      var c = eval(Util.safeCar(args), env);
+      if (Util.isError(c)) { return c; }
+      if (c == Util.kNil) {
+        return eval(Util.safeCar(Util.safeCdr(Util.safeCdr(args))), env);
+      }
+      return eval(Util.safeCar(Util.safeCdr(args)), env);
+    }
+    return apply(eval(op, env), evlis(args, env), env);
+  }
+
+  private static function evlis(lst, env) {
+    var ret = Util.kNil;
+    var cell;
+    while ((cell = Util.getCell(lst)).isValid()) {
+      var elm = eval(cell.car, env);
+      if (Util.isError(elm)) { return elm; }
+      ret = Util.makeCons(elm, ret);
+      lst = cell.cdr;
+    }
+    return Util.nreverse(ret);
+  }
+
+  private static function apply(fn, args, env) {
+    if (Util.isError(fn)) { return fn; }
+    if (Util.isError(args)) { return args; }
+    switch (fn) {
+      case Subr(fn): return fn(args);
+      default: return Error(Printer.print(fn) + " is not function");
+    }
+  }
+
+  private static function subrCar(args) {
+    return Util.safeCar(Util.safeCar(args));
+  }
+
+  private static function subrCdr(args) {
+    return Util.safeCdr(Util.safeCar(args));
+  }
+
+  private static function subrCons(args) {
+    return Util.makeCons(Util.safeCar(args), Util.safeCar(Util.safeCdr(args)));
   }
 
   private static function makeGlobalEnv() {
     var env = Util.makeCons(Util.kNil, Util.kNil);
+    addToEnv(Util.makeSym("car"), Subr(subrCar), env);
+    addToEnv(Util.makeSym("cdr"), Subr(subrCdr), env);
+    addToEnv(Util.makeSym("cons"), Subr(subrCons), env);
     addToEnv(Util.makeSym("t"), Util.makeSym("t"), env);
     return env;
   }
