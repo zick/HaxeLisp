@@ -281,6 +281,17 @@ class Evaluator {
       var sym = Util.safeCar(args);
       addToEnv(sym, expr, gEnv);
       return sym;
+    } else if (op == Util.makeSym("setq")) {
+      var val = eval(Util.safeCar(Util.safeCdr(args)), env);
+      if (Util.isError(val)) { return val; }
+      var sym = Util.safeCar(args);
+      var bind = findVar(sym, env);
+      if (bind == Util.kNil) {
+        addToEnv(sym, val, gEnv);
+      } else {
+        Util.getCell(bind).cdr = val;
+      }
+      return val;
     }
     return apply(eval(op, env), evlis(args, env), env);
   }
