@@ -32,6 +32,10 @@ class Util {
     return symMap.get(str);
   }
 
+  public static function makeExpr(args, env) {
+    return Expr(safeCar(args), safeCdr(args), env);
+  }
+
   public static function safeCar(obj) {
     return switch (obj) {
       case Cons(cell): cell.car;
@@ -74,6 +78,18 @@ class Util {
       lst = tmp;
     }
     return ret;
+  }
+
+  public static function pairlis(lst1, lst2) {
+    var ret = kNil;
+    var cell1, cell2;
+    while ((cell1 = getCell(lst1)).isValid() &&
+           (cell2 = getCell(lst2)).isValid()) {
+      ret = makeCons(makeCons(cell1.car, cell2.car), ret);
+      lst1 = cell1.cdr;
+      lst2 = cell2.cdr;
+    }
+    return nreverse(ret);
   }
 
   public static var kNil = Nil;
@@ -258,6 +274,8 @@ class Evaluator {
         return eval(Util.safeCar(Util.safeCdr(Util.safeCdr(args))), env);
       }
       return eval(Util.safeCar(Util.safeCdr(args)), env);
+    } else if (op == Util.makeSym("lambda")) {
+      return Util.makeExpr(args, env);
     }
     return apply(eval(op, env), evlis(args, env), env);
   }
@@ -274,12 +292,23 @@ class Evaluator {
     return Util.nreverse(ret);
   }
 
+  private static function progn(body, env) {
+    var ret = Util.kNil;
+    var cell;
+    while ((cell = Util.getCell(body)).isValid()) {
+      ret = eval(cell.car, env);
+      body = cell.cdr;
+    }
+    return ret;
+  }
+
   private static function apply(fn, args, env) {
     if (Util.isError(fn)) { return fn; }
     if (Util.isError(args)) { return args; }
-    switch (fn) {
-      case Subr(fn): return fn(args);
-      default: return Error(Printer.print(fn) + " is not function");
+    return switch (fn) {
+      case Subr(fn): fn(args);
+      case Expr(a, b, e): progn(b, Util.makeCons(Util.pairlis(a, args), e));
+      default: Error(Printer.print(fn) + " is not function");
     }
   }
 
