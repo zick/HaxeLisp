@@ -13,8 +13,13 @@ class Cell {
     this.car = a;
     this.cdr = d;
   }
+
+  public static function invalid() { return invalid_; }
+  public function isValid() { return this != invalid_; }
+
   public var car : LObj;
   public var cdr : LObj;
+  private static var invalid_ = new Cell(Nil, Nil);
 }
 
 class Util {
@@ -45,14 +50,24 @@ class Util {
     return Cons(new Cell(a, d));
   }
 
+  public static function getCell(obj) {
+    return switch (obj) {
+      case Cons(cell): return cell;
+      default: Cell.invalid();
+    }
+  }
+
+  public static function isError(obj) {
+    return switch (obj) {
+      case Error(_): true;
+      default: false;
+    }
+  }
+
   public static function nreverse(lst) {
     var ret = kNil;
-    while (true) {
-      var cell;
-      switch (lst) {
-        case Cons(c): cell = c;
-        default: break;  // break from while
-      }
+    var cell;
+    while ((cell = Util.getCell(lst)).isValid()) {
       var tmp = cell.cdr;
       cell.cdr = ret;
       ret = lst;
@@ -147,9 +162,8 @@ class Reader {
         break;
       }
       var tmp = read(str);
-      switch (tmp.obj) {
-        case Error(_): return tmp;  // return from readList
-        default: true;
+      if (Util.isError(tmp.obj)) {
+        return tmp;
       }
       ret = Util.makeCons(tmp.obj, ret);
       str = tmp.next;
@@ -179,18 +193,15 @@ class Printer {
   private static function printList(obj) {
     var ret = "";
     var first = true;
-    while (true) {
-      switch (obj) {
-        case Cons(_): true;
-        default: break;  // break from while
-      }
+    var cell;
+    while ((cell = Util.getCell(obj)).isValid()) {
       if (first) {
         first = false;
       } else {
         ret += " ";
       }
-      ret += print(Util.safeCar(obj));
-      obj = Util.safeCdr(obj);
+      ret += print(cell.car);
+      obj = cell.cdr;
     }
     if (obj == Util.kNil) {
       return "(" + ret + ")";
@@ -199,13 +210,63 @@ class Printer {
   }
 }
 
+class Evaluator {
+  private static function findVar(sym, env) {
+    var cell;
+    while ((cell = Util.getCell(env)).isValid()) {
+      var alist = cell.car;
+      var cell2;
+      while ((cell2 = Util.getCell(alist)).isValid()) {
+        if (Util.safeCar(cell2.car) == sym) {
+          return cell2.car;
+        }
+        alist = cell2.cdr;
+      }
+      env = cell.cdr;
+    }
+    return Util.kNil;
+  }
+
+  public static function addToEnv(sym, val, env) {
+    var cell = Util.getCell(env);
+    cell.car = Util.makeCons(Util.makeCons(sym, val), cell.car);
+  }
+
+  public static function eval(obj, env) {
+    switch (obj) {
+      case Nil: return obj;
+      case Num(_): return obj;
+      case Error(_): return obj;
+      case Sym(name): {
+        var bind = findVar(obj, env);
+        if (bind == Util.kNil) {
+          return Error(name + " has no value");
+        }
+        return Util.getCell(bind).cdr;
+      }
+      default: return Error("noimpl");
+    }
+  }
+
+  private static function makeGlobalEnv() {
+    var env = Util.makeCons(Util.kNil, Util.kNil);
+    addToEnv(Util.makeSym("t"), Util.makeSym("t"), env);
+    return env;
+  }
+
+  public static function globalEnv() { return gEnv; }
+
+  private static var gEnv = makeGlobalEnv();
+}
+
 class HaxeLisp {
   static function main() {
     var stdin = Sys.stdin();
+    var gEnv = Evaluator.globalEnv();
     Sys.print("> ");
     try while (true) {
       var line = stdin.readLine();
-      Sys.println(Printer.print(Reader.read(line).obj));
+      Sys.println(Printer.print(Evaluator.eval(Reader.read(line).obj, gEnv)));
       Sys.print("> ");
     } catch(_ : haxe.io.Eof) true;
   }
