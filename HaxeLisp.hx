@@ -68,6 +68,20 @@ class Util {
     }
   }
 
+  public static function isNum(obj) {
+    return switch (obj) {
+      case Num(_): true;
+      default: false;
+    }
+  }
+
+  public static function getNum(obj) {
+    return switch (obj) {
+      case Num(num): num;
+      default: -1;
+    }
+  }
+
   public static function nreverse(lst) {
     var ret = kNil;
     var cell;
@@ -340,11 +354,91 @@ class Evaluator {
     return Util.makeCons(Util.safeCar(args), Util.safeCar(Util.safeCdr(args)));
   }
 
+  private static function subrEq(args) {
+    var x = Util.safeCar(args);
+    var y = Util.safeCar(Util.safeCdr(args));
+    if (Util.isNum(x) && Util.isNum(y)) {
+      if (Util.getNum(x) == Util.getNum(y)) {
+        return Util.makeSym("t");
+      }
+      return Util.kNil;
+    } else if (x == y) {
+      return Util.makeSym("t");
+    }
+    return Util.kNil;
+  }
+
+  private static function subrAtom(args) {
+    return switch (Util.safeCar(args)) {
+      case Cons(_): Util.kNil;
+      default: Util.makeSym("t");
+    };
+  }
+
+  private static function subrNumberp(args) {
+    return switch (Util.safeCar(args)) {
+      case Num(_): Util.makeSym("t");
+      default: Util.kNil;
+    };
+  }
+
+  private static function subrSymbolp(args) {
+    return switch (Util.safeCar(args)) {
+      case Sym(_): Util.makeSym("t");
+      default: Util.kNil;
+    };
+  }
+
+  private static function subrAddOrMul(initVal, fn) {
+    return function(args) {
+      var ret = initVal;
+      var cell;
+      while ((cell = Util.getCell(args)).isValid()) {
+        if (!Util.isNum(cell.car)) {
+          return Error("wrong type");
+        }
+        ret = fn(ret, Util.getNum(cell.car));
+        args = cell.cdr;
+      }
+      return Num(ret);
+    };
+  }
+  private static var subrAdd =
+      subrAddOrMul(0, function(x, y) { return x + y; });
+  private static var subrMul =
+      subrAddOrMul(1, function(x, y) { return x * y; });
+
+  private static function subrSubOrDivOrMod(fn) {
+    return function(args) {
+      var x = Util.safeCar(args);
+      var y = Util.safeCar(Util.safeCdr(args));
+      if (!Util.isNum(x) || !Util.isNum(y)) {
+        return Error("wrong type");
+      }
+      return Num(fn(Util.getNum(x), Util.getNum(y)));
+    };
+  }
+  private static var subrSub =
+      subrSubOrDivOrMod(function(x, y) { return x - y; });
+  private static var subrDiv =
+      subrSubOrDivOrMod(function(x, y) { return Std.int(x / y); });
+  private static var subrMod =
+      subrSubOrDivOrMod(function(x, y) { return x % y; });
+
   private static function makeGlobalEnv() {
     var env = Util.makeCons(Util.kNil, Util.kNil);
     addToEnv(Util.makeSym("car"), Subr(subrCar), env);
     addToEnv(Util.makeSym("cdr"), Subr(subrCdr), env);
     addToEnv(Util.makeSym("cons"), Subr(subrCons), env);
+    addToEnv(Util.makeSym("eq"), Subr(subrEq), env);
+    addToEnv(Util.makeSym("atom"), Subr(subrAtom), env);
+    addToEnv(Util.makeSym("numberp"), Subr(subrNumberp), env);
+    addToEnv(Util.makeSym("symbolp"), Subr(subrSymbolp), env);
+    addToEnv(Util.makeSym("+"), Subr(subrAdd), env);
+    addToEnv(Util.makeSym("*"), Subr(subrMul), env);
+    addToEnv(Util.makeSym("-"), Subr(subrSub), env);
+    addToEnv(Util.makeSym("/"), Subr(subrDiv), env);
+    addToEnv(Util.makeSym("mod"), Subr(subrMod), env);
     addToEnv(Util.makeSym("t"), Util.makeSym("t"), env);
     return env;
   }
